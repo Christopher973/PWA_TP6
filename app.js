@@ -51,6 +51,19 @@ async function registerServiceWorker() {
           updateTimerDisplay(event.data.minutes, event.data.seconds);
         } else if (event.data.type === "timerEnded") {
           resetTimerInterface();
+
+          // Notification de secours si le Service Worker échoue à envoyer une notification
+          if (Notification.permission === "granted") {
+            try {
+              new Notification("PWA Timer", {
+                body: "Votre minuteur est terminé !",
+                vibrate: [100, 50, 100, 50, 100],
+              });
+              console.log("Notification de secours affichée");
+            } catch (error) {
+              console.error("Échec de la notification de secours:", error);
+            }
+          }
         }
       });
     } catch (error) {
@@ -72,6 +85,29 @@ function setupEventListeners() {
     "click",
     requestNotificationPermission
   );
+  document
+    .getElementById("testNotificationButton")
+    ?.addEventListener("click", testNotification);
+}
+
+// Fonction de test de notification
+function testNotification() {
+  if (Notification.permission !== "granted") {
+    alert("Vous devez d'abord autoriser les notifications");
+    return;
+  }
+
+  // Test de notification par le navigateur
+  new Notification("Test Notification", {
+    body: "Ceci est une notification de test depuis l'application",
+  });
+
+  // Test via le Service Worker
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({
+      action: "testNotification",
+    });
+  }
 }
 
 // Vérification initiale des permissions de notification
@@ -106,21 +142,30 @@ async function requestNotificationPermission() {
       permissionStatusElement.textContent =
         "Status des permissions: Autorisées";
       requestPermissionButton.style.display = "none";
+
+      // Envoyer un message au Service Worker pour lui indiquer que les permissions sont accordées
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          action: "permissionGranted",
+        });
+      }
+
+      return true;
     } else if (permission === "denied") {
       permissionStatusElement.textContent = "Status des permissions: Refusées";
+      alert(
+        "Sans autorisation des notifications, vous ne recevrez pas d'alerte à la fin du timer."
+      );
+      return false;
     }
   } catch (error) {
     console.error("Erreur lors de la demande de permission:", error);
+    return false;
   }
 }
 
 // Démarrage du timer
 async function startTimer() {
-  if (!swRegistration || !navigator.serviceWorker.controller) {
-    console.error("Service Worker non disponible");
-    return;
-  }
-
   // Récupération des valeurs de temps entrées par l'utilisateur
   const minutes = parseInt(timerMinutesInput.value) || 0;
   const seconds = parseInt(timerSecondsInput.value) || 0;
@@ -128,6 +173,13 @@ async function startTimer() {
   // Vérification que le temps est supérieur à 0
   if (minutes === 0 && seconds === 0) {
     alert("Veuillez définir une durée pour le timer");
+    return;
+  }
+
+  // Si le Service Worker n'est pas encore contrôleur, recharger la page
+  if (!navigator.serviceWorker.controller) {
+    alert("Service Worker en cours d'initialisation. La page va se recharger.");
+    window.location.reload();
     return;
   }
 
@@ -146,6 +198,15 @@ async function startTimer() {
     action: "startTimer",
     duration: totalSeconds,
   });
+
+  if (Notification.permission !== "granted") {
+    const askPermission = confirm(
+      "Pour recevoir une notification lorsque le timer est terminé, veuillez autoriser les notifications. Souhaitez-vous les activer maintenant?"
+    );
+    if (askPermission) {
+      await requestNotificationPermission();
+    }
+  }
 
   // Mise à jour initiale de l'affichage
   updateTimerDisplay(minutes, seconds);

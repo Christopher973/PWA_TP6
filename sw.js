@@ -116,6 +116,8 @@ self.addEventListener("message", (event) => {
     startTimer(event.data.duration, event.source);
   } else if (event.data.action === "stopTimer") {
     stopTimer();
+  } else if (event.data.action === "testNotification") {
+    showNotification("Test depuis Service Worker");
   }
 });
 
@@ -181,7 +183,7 @@ function stopTimer() {
 }
 
 // Fonction pour afficher une notification
-function showNotification() {
+function showNotification(title = "PWA Timer") {
   // Vérifier si on peut utiliser la registration
   if (!self.registration) {
     console.error(
@@ -189,6 +191,8 @@ function showNotification() {
     );
     return;
   }
+
+  console.log("[Service Worker] Tentative d'affichage de notification");
 
   const notificationOptions = {
     body: "Votre minuteur est terminé !",
@@ -209,7 +213,24 @@ function showNotification() {
     ],
   };
 
-  self.registration.showNotification("PWA Timer", notificationOptions);
+  try {
+    self.registration
+      .showNotification(title, notificationOptions)
+      .then(() =>
+        console.log("[Service Worker] Notification affichée avec succès")
+      )
+      .catch((error) =>
+        console.error(
+          "[Service Worker] Erreur d'affichage de notification:",
+          error
+        )
+      );
+  } catch (error) {
+    console.error(
+      "[Service Worker] Exception lors de l'affichage de notification:",
+      error
+    );
+  }
 }
 
 // Gestion des clics sur les notifications
